@@ -38,7 +38,6 @@ class MainActivity : ComponentActivity() {
     private fun registerScreenReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
         }
         registerReceiver(screenReceiver, filter)
     }
@@ -84,6 +83,19 @@ fun PowerKeyScreen(onStartService: () -> Unit) {
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
                 Text(
+                    text = "欢迎使用电源键时间播报\n\n功能说明（启动服务后）：\n• 按电源键亮屏时自动播报当前时间\n• 支持中文语音播报\n• 自动调节音量至最大\n\n使用前请确保：\n1. 已开启系统文字转语音(TTS)\n2. Android 13+需授予通知权限" ,
+                    modifier = Modifier.padding(24.dp),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Card(
+                modifier = Modifier.padding(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Text(
                     text = statusText,
                     modifier = Modifier.padding(24.dp),
                     style = MaterialTheme.typography.bodyLarge
@@ -96,7 +108,7 @@ fun PowerKeyScreen(onStartService: () -> Unit) {
                 onClick = {
                     onStartService()
                     isServiceRunning = true
-                    statusText = "服务运行中\n按电源键（亮屏/息屏）将播报时间"
+                    statusText = "服务运行中"
                 },
                 enabled = !isServiceRunning
             ) {

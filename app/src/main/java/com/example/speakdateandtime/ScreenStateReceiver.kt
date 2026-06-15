@@ -17,14 +17,6 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     context.startService(serviceIntent)
                 }
             }
-            Intent.ACTION_SCREEN_OFF -> {
-                serviceIntent.putExtra("action", "SCREEN_OFF")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent)
-                } else {
-                    context.startService(serviceIntent)
-                }
-            }
         }
     }
 }

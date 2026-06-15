@@ -15,24 +15,18 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
     private var isTtsReady = false
     private var audioManager: AudioManager? = null
     private var originalVolume = 0
-    private var lastScreenStatus: String? = null
 
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "power_tts_channel"
         private var lastSpeakTime = 0L
         private const val DEBOUNCE_MS = 1000L
-        private const val PREFS_NAME = "screen_state_prefs"
-        private const val KEY_LAST_STATUS = "last_screen_status"
     }
 
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         tts = TextToSpeech(this, this)
-        
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        lastScreenStatus = prefs.getString(KEY_LAST_STATUS, null)
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "电源键播报服务", NotificationManager.IMPORTANCE_LOW)
@@ -57,16 +51,11 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val currentStatus = intent?.getStringExtra("action")
-        if (currentStatus in listOf("SCREEN_ON", "SCREEN_OFF")) {
-            if (currentStatus != lastScreenStatus) {
-                val now = System.currentTimeMillis()
-                if (now - lastSpeakTime >= DEBOUNCE_MS) {
-                    lastScreenStatus = currentStatus
-                    val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    prefs.edit().putString(KEY_LAST_STATUS, currentStatus).apply()
-                    lastSpeakTime = now
-                    speakCurrentTime()
-                }
+        if (currentStatus == "SCREEN_ON") {
+            val now = System.currentTimeMillis()
+            if (now - lastSpeakTime >= DEBOUNCE_MS) {
+                lastSpeakTime = now
+                speakCurrentTime()
             }
         }
         return START_REDELIVER_INTENT
