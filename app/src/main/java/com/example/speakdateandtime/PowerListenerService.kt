@@ -61,6 +61,25 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         // this 既是 Context 也是 OnInitListener（因为实现了该接口）
         tts = TextToSpeech(this, this)
         
+        // ==================== 设置 TTS 播报完成监听器 ====================
+        // 用于在播报完成后自动恢复音量，确保不会提前恢复
+        tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                // 播报开始时调用（不需要处理）
+            }
+
+            override fun onDone(utteranceId: String?) {
+                // ✅ 播报真正完成时调用，此时才恢复原始音量
+                // 这确保了无论播报多长，都会等完全结束后才恢复音量
+                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
+            }
+
+            override fun onError(utteranceId: String?) {
+                // 播报出错时也恢复音量，避免音量一直保持最大
+                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
+            }
+        })
+        
         // ==================== 创建通知渠道（Android 8.0+ 必需）====================
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // 创建通知渠道
@@ -152,7 +171,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      * 1. 确保 TTS 已就绪
      * 2. 将音量调至最大
      * 3. 播报时间文本
-     * 4. 3 秒后恢复原音量
+     * 4. ✅ 播报完成后通过 UtteranceProgressListener.onDone() 自动恢复原音量
      */
     private fun speakCurrentTime() {
         // ==================== 确保 TTS 就绪 ====================
@@ -168,15 +187,10 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         
         // ==================== 执行语音播报 ====================
         // QUEUE_FLUSH：清空队列，立即播报（打断之前的播报）
-        // 参数：文本、队列模式、附加参数、播报完成回调
-        tts?.speak(getCurrentTimeText(), TextToSpeech.QUEUE_FLUSH, null, null)
+        // 最后一个参数 utteranceId：用于标识这次播报，onDone 回调时会用到
+        // ✅ 关键：传入 "time_utterance" 作为标识，让 UtteranceProgressListener 能识别
+        tts?.speak(getCurrentTimeText(), TextToSpeech.QUEUE_FLUSH, null, "time_utterance")
         
-        // ==================== 延迟恢复音量 ====================
-        // 使用 Handler 在主线程延迟执行
-        // 3 秒后恢复原始音量（给足够时间让播报完成）
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
-        }, 3000)
     }
 
     /**
