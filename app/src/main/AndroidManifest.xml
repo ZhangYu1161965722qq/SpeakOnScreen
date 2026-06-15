@@ -1,44 +1,204 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    ============================================================================
+    AndroidManifest.xml - 应用清单文件
+    ============================================================================
+
+    作用：
+    1. 声明应用的组件（Activity、Service、BroadcastReceiver等）
+    2. 定义应用需要的权限
+    3. 配置应用的基本信息（名称、图标、主题等）
+    4. 指定应用的最低支持版本
+
+    注意：这是 Android 应用的核心配置文件，所有组件都必须在此声明
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Android 13+ 通知权限 -->
+    <!--
+        ========================================================================
+        权限声明区域
+        ========================================================================
+
+        说明：
+        - 普通权限：系统自动授予（如 WAKE_LOCK）
+        - 危险权限：需要用户手动授权（如 POST_NOTIFICATIONS）
+        - 特殊权限：需要特定条件才能使用（如 FOREGROUND_SERVICE_*）
+    -->
+
+    <!--
+        POST_NOTIFICATIONS - 通知权限（Android 13+ 必需）
+
+        说明：
+        - 从 Android 13 (API 33) 开始，应用需要显式请求此权限才能发送通知
+        - 本应用使用前台服务，必须显示通知，所以需要此权限
+        - 需要在运行时通过代码请求用户授权
+
+        兼容性：
+        - Android 12 及以下：不需要此权限
+        - Android 13+：必须声明并请求此权限
+    -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 唤醒锁权限（防止CPU休眠影响服务） -->
+    <!--
+        WAKE_LOCK - 唤醒锁权限
+
+        说明：
+        - 允许应用阻止 CPU 进入休眠状态
+        - 确保后台服务在屏幕关闭时仍能正常运行
+        - 防止系统在播报时间前就杀死进程
+
+        用途：
+        - 保证 TTS 播报期间 CPU 保持活跃
+        - 提高服务的可靠性
+    -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- 前台服务权限 -->
+<!-- 此APP中FOREGROUND_SERVICE、FOREGROUND_SERVICE_DATA_SYNC 这2个权限都要，否则闪退，原因待查  -->
+
+    <!--
+        FOREGROUND_SERVICE - 前台服务权限
+
+        说明：
+        - 允许应用启动前台服务
+        - 前台服务会显示持久性通知，优先级高
+        - 不容易被系统杀死
+
+        注意：
+        - Android 9.0+ 已移除此权限的必要性
+        - 但为了兼容旧版本，建议保留
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <!-- 前台服务数据同步权限 -->
+    <!--
+        FOREGROUND_SERVICE_DATA_SYNC - 前台服务数据同步权限（Android 14+ 必需）
+
+        说明：
+        - Android 14 (API 34) 要求前台服务必须声明具体类型
+        - dataSync 表示这是一个数据同步类的前台服务
+        - 与 foregroundServiceType="dataSync" 配合使用
+
+        重要性：
+        - Android 14+ 必须声明此权限，否则编译报错
+        - 替代了通用的 FOREGROUND_SERVICE 权限
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
 
+    <!--
+        ========================================================================
+        应用配置区域
+        ========================================================================
+
+        application 标签包含应用的所有组件和全局配置
+
+        属性说明：
+        - allowBackup: 是否允许应用数据备份（true=允许，false=禁止）
+        - icon: 应用图标资源引用
+        - label: 应用名称（显示在桌面和设置中）
+        - theme: 应用主题样式（此处使用 Material Light 无 ActionBar 主题）
+    -->
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="电源键播报"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!--
+            ====================================================================
+            Activity 组件声明
+            ====================================================================
+
+            MainActivity - 主界面 Activity
+
+            功能：
+            - 应用的入口点
+            - 显示控制界面
+            - 管理广播接收器和服务
+
+            属性说明：
+            - name: 类名（相对于包名）
+            - exported: true 表示可以被其他应用启动（作为 Launcher）
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
+
+            <!--
+                Intent Filter - 意图过滤器
+
+                作用：声明此 Activity 可以响应哪些 Intent
+
+                MAIN + LAUNCHER 组合：
+                - 表示这是应用的主入口
+                - 会在桌面显示应用图标
+                - 用户点击图标时启动此 Activity
+            -->
             <intent-filter>
+                <!-- 主 Action：应用入口 -->
                 <action android:name="android.intent.action.MAIN" />
+
+                <!-- Category：启动器类别 -->
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- 后台服务声明 -->
+        <!--
+            ====================================================================
+            Service 组件声明
+            ====================================================================
+
+            PowerListenerService - 电源键播报服务
+
+            功能：
+            - 接收亮屏事件并播报时间
+            - 使用 TTS 进行中文语音播报
+            - 作为前台服务运行，降低被杀死的概率
+
+            属性说明：
+            - name: 服务类名（相对于包名）
+            - exported: false 表示只能被本应用启动（安全性更好）
+            - foregroundServiceType: 前台服务类型（Android 14+ 必需）
+              * dataSync 表示数据同步类服务
+              * 必须与 FOREGROUND_SERVICE_DATA_SYNC 权限配合使用
+        -->
         <service
             android:name=".PowerListenerService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- 广播接收器声明 -->
+        <!--
+            ====================================================================
+            BroadcastReceiver 组件声明
+            ====================================================================
+
+            ScreenStateReceiver - 屏幕状态广播接收器
+
+            功能：
+            - 监听系统广播（SCREEN_ON/OFF）
+            - 当屏幕亮起时启动 PowerListenerService
+            - 作为系统和后台服务之间的桥梁
+
+            属性说明：
+            - name: 接收器类名（相对于包名）
+            - exported: true 表示可以接收系统广播（必需）
+
+            Intent Filter：
+            - 只监听 SCREEN_ON 事件（亮屏）
+            - 不监听 SCREEN_OFF，避免屏幕超时误触发
+        -->
         <receiver
             android:name=".ScreenStateReceiver"
             android:exported="true">
+
+            <!--
+                Intent Filter - 意图过滤器
+
+                作用：声明此接收器监听的广播类型
+
+                SCREEN_ON：
+                - 屏幕亮起时触发的系统广播
+                - 包括按电源键亮屏、充电亮屏等场景
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.SCREEN_ON" />
             </intent-filter>
