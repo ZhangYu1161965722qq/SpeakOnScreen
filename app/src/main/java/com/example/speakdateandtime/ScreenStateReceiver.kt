@@ -49,10 +49,7 @@ class ScreenStateReceiver : BroadcastReceiver() {
                     context.startService(serviceIntent)
                 }
             }
-            
-            // ==================== 其他事件 ====================
-            // 注意：当前版本不处理 SCREEN_OFF 等其他事件
-            // 原因：只在用户主动亮屏时报时，避免屏幕超时误触发
+
         }
     }
 }

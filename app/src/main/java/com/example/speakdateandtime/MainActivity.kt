@@ -3,7 +3,6 @@ package com.example.speakdateandtime
 
 // ==================== Android 系统相关导入 ====================
 import android.content.Intent          // Intent：用于启动服务和传递数据
-import android.content.IntentFilter    // IntentFilter：定义广播接收器要监听的事件类型
 import android.os.Build                // Build：获取设备系统版本信息
 import android.os.Bundle               // Bundle：保存 Activity 的状态数据
 
@@ -24,14 +23,10 @@ import com.example.speakdateandtime.ui.theme.SpeakDateAndTimeTheme
  * 主界面 Activity
  * 
  * 功能说明：
- * 1. 注册屏幕状态广播接收器，监听屏幕亮屏事件
- * 2. 显示控制界面，用户可以启动播报服务
- * 3. 管理服务的生命周期
+ * 1. 显示控制界面，用户可以启动播报服务
+ * 2. 管理服务的生命周期
  */
 class MainActivity : ComponentActivity() {
-
-    // 屏幕状态广播接收器（lateinit 表示稍后初始化，避免可空类型）
-    private lateinit var screenReceiver: ScreenStateReceiver
 
     /**
      * Activity 创建时调用
@@ -39,10 +34,6 @@ class MainActivity : ComponentActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // ==================== 初始化广播接收器 ====================
-        screenReceiver = ScreenStateReceiver()
-        registerScreenReceiver()
 
         // ==================== 设置 Compose UI ====================
         setContent {
@@ -60,26 +51,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 注册屏幕状态广播接收器
-     * 只监听 SCREEN_ON（亮屏）事件，避免屏幕超时误触发
+     * Activity 恢复时调用
+     * 确保服务在后台运行（如果被关闭则重新启动）
      */
-    private fun registerScreenReceiver() {
-        // 创建 IntentFilter，指定要监听的广播类型
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)  // 只添加亮屏事件
-        }
-        // 注册接收器
-        registerReceiver(screenReceiver, filter)
-    }
-
-    /**
-     * Activity 销毁时调用
-     * 必须取消注册广播接收器，否则会导致内存泄漏
-     */
-    override fun onDestroy() {
-        super.onDestroy()
-        // 取消注册广播接收器，释放资源
-        unregisterReceiver(screenReceiver)
+    override fun onResume() {
+        super.onResume()
+        // 可选：检查服务是否运行，如需要可重新启动
     }
 
     /**
@@ -133,36 +110,32 @@ fun PowerKeyScreen(onStartService: () -> Unit) {
                 text = "电源键时间播报",
                 style = MaterialTheme.typography.headlineMedium  // 使用主题定义的标题样式
             )
-            Spacer(modifier = Modifier.height(8.dp))  // 间距：8dp
+            Spacer(modifier = Modifier.height(16.dp))  // 间距
 
-            // ==================== 使用说明卡片 ====================
+            // ==================== 使用说明 ====================
             // Card：卡片组件，带有阴影和圆角
-            Card(
-                modifier = Modifier.padding(8.dp),  // 外边距
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)  // 阴影高度
-            ) {
-                Text(
-                    text = "欢迎使用电源键时间播报\n\n功能说明（启动服务后）：\n• 按电源键亮屏时自动播报当前时间\n• 支持中文语音播报\n• 自动调节音量至最大\n\n使用前请确保：\n1. 已开启系统文字转语音(TTS)\n2. Android 13+需授予通知权限" ,
-                    modifier = Modifier.padding(8.dp),  // 内边距
-                    style = MaterialTheme.typography.bodyLarge  // 正文样式
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))  // 间距：8dp
-
-            // ==================== 状态显示卡片 ====================
             Card(
                 modifier = Modifier.padding(8.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
                 Text(
-                    text = statusText,  // 动态显示状态文本
-                    modifier = Modifier.padding(8.dp),
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                text = "欢迎使用电源键时间播报\n\n功能说明（启动服务后）：\n• 按电源键亮屏时自动播报当前时间\n\n使用前请确保：\n1.已开启系统文字转语音(TTS)\n2.授予通知权限" ,
+                modifier = Modifier.padding(16.dp),  // 内边距
+                style = MaterialTheme.typography.bodyLarge  // 正文样式
+            )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))  // 间距：8dp
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ==================== 状态显示 ====================
+                Text(
+                    text = statusText,  // 动态显示状态文本
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = androidx.compose.ui.graphics.Color(0xFF666666)  // 固定浅灰色
+                )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // ==================== 启动按钮 ====================
             Button(
@@ -172,6 +145,7 @@ fun PowerKeyScreen(onStartService: () -> Unit) {
                     isServiceRunning = true    // 更新状态为运行中
                     statusText = "服务运行中"  // 更新提示文本
                 },
+                modifier = Modifier.height(56.dp),  // 设置按钮高度为 56dp（可根据需要调整，如 64.dp 更高）
                 enabled = !isServiceRunning  // 服务运行时禁用按钮（防止重复启动）
             ) {
                 // 根据状态显示不同的按钮文字

@@ -3,7 +3,10 @@ package com.example.speakdateandtime
 
 // ==================== Android 系统相关导入 ====================
 import android.app.*                    // 通知相关类：Notification, NotificationChannel, Service
+import android.content.BroadcastReceiver  // BroadcastReceiver：广播接收器
+import android.content.Context           // Context：上下文
 import android.content.Intent           // Intent：接收启动参数
+import android.content.IntentFilter     // IntentFilter：定义广播接收器要监听的事件类型
 import android.media.AudioManager       // AudioManager：音频管理器，控制音量
 import android.os.Build                 // Build：系统版本检测
 import android.os.IBinder               // IBinder：服务绑定接口（本例未使用）
@@ -12,6 +15,9 @@ import androidx.core.app.NotificationCompat  // 通知兼容性库
 
 // ==================== Java 工具类导入 ====================
 import java.util.*                      // Calendar, Locale 等工具类
+
+// ==================== 农历库导入（tyme4kt）====================
+import com.tyme.solar.SolarDay// 公历日期（包含农历、星期等信息）
 
 /**
  * 电源键播报服务（前台服务）
@@ -36,6 +42,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
     private var isTtsReady = false                  // TTS 是否初始化完成
     private var audioManager: AudioManager? = null  // 音频管理器
     private var originalVolume = 0                  // 原始音量（播报前保存，播报后恢复）
+    private var screenReceiver: BroadcastReceiver? = null  // 亮屏广播接收器
 
     // ==================== 伴生对象（类似 Java 的 static）====================
     companion object {
@@ -105,6 +112,9 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
                 .setPriority(NotificationCompat.PRIORITY_LOW)   // 低优先级
                 .build()                                        // 构建通知对象
         )
+        
+        // ==================== 注册亮屏广播接收器 ====================
+        registerScreenOnReceiver()
     }
 
     /**
@@ -123,7 +133,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
             
             // 设置语速：0.5f 表示正常速度的一半（较慢，更清晰）
             // 取值范围：0.1f（最慢）~ 2.0f（最快），1.0f 为正常速度
-            tts?.setSpeechRate(0.5f)
+            tts?.setSpeechRate(0.3f)
         }
     }
 
@@ -161,7 +171,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         // ==================== 返回服务行为常量 ====================
         // START_REDELIVER_INTENT：如果服务被杀死，系统会重启服务并重新投递最后一个 Intent
         // 这确保了服务的可靠性，即使进程被杀死也能自动恢复
-        return START_REDELIVER_INTENT
+        return START_STICKY  // 系统会在资源允许时自动重启服务
     }
 
     /**
@@ -178,7 +188,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         if (!isTtsReady) {
             // 如果 TTS 未就绪，重新配置（理论上不会发生，因为 onCreate 已初始化）
             tts?.language = Locale.CHINESE
-            tts?.setSpeechRate(0.5f)
+            tts?.setSpeechRate(0.3f)
         }
         
         // ==================== 调节音量 ====================
@@ -189,7 +199,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         // QUEUE_FLUSH：清空队列，立即播报（打断之前的播报）
         // 最后一个参数 utteranceId：用于标识这次播报，onDone 回调时会用到
         // ✅ 关键：传入 "time_utterance" 作为标识，让 UtteranceProgressListener 能识别
-        tts?.speak(getCurrentTimeText(), TextToSpeech.QUEUE_FLUSH, null, "time_utterance")
+        tts?.speak(getCurrentTimeText()+getBatteryInfo(), TextToSpeech.QUEUE_FLUSH, null, "time_utterance")
         
     }
 
@@ -216,22 +226,32 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
     /**
      * 获取当前时间的文本描述
      * 
-     * 格式示例："现在是2026年6月15日。下午3点25分"
-     * 
-     * 特点：
-     * 1. 使用句号分隔日期和时间，产生自然停顿
-     * 2. 根据小时智能判断时间段（上午/下午/晚上等）
-     * 3. 使用 12 小时制更符合日常习惯
+     * 格式示例："现在是2026年6月15日，星期一，农历五月初十。下午3点25分"
      * 
      * @return 格式化后的时间文本
      */
     private fun getCurrentTimeText(): String {
-        // 获取当前时间
-        val now = Calendar.getInstance()
-        val hour = now.get(Calendar.HOUR_OF_DAY)  // 24 小时制（0-23）
-        
+        // 用系统 Calendar 获取当前的年、月、日
+        val calendar = Calendar.getInstance()
+        val year = calendar.get(Calendar.YEAR)
+        val month = calendar.get(Calendar.MONTH) + 1  // Calendar的月份从0开始
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+        // 用 tyme4j 将公历转换为农历
+        val solar = SolarDay.fromYmd(year, month, day)
+
+        // 获取农历和星期
+        val solarDate = solar.toString()           // 公历: 2026年6月16日
+
+        var lunarDate = solar.getLunarDay().toString()  // 农历: 农历丙午年五月廿一
+        lunarDate=lunarDate.substring(lunarDate.indexOf("年")+1)
+
+        val weekDay = solar.getWeek()              // 星期: 星期二
+
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(Calendar.MINUTE)
+
         // ==================== 判断时间段 ====================
-        // 根据小时数确定属于哪个时间段
         val period = when (hour) {
             in 0..4 -> "深夜"      // 0-4点：深夜
             in 5..11 -> "上午"     // 5-11点：上午
@@ -243,14 +263,77 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         
         // ==================== 转换为 12 小时制 ====================
         val hour12 = when (hour) {
-            0 -> 12                // 0点 → 12点（午夜）
-            in 13..23 -> hour - 12 // 13-23点 → 1-11点
-            else -> hour           // 1-12点保持不变
+            0 -> 12                         // 0点 → 12点（午夜）
+            in 13..23 -> hour - 12    // 13-23点 → 1-11点
+            else -> hour                    // 1-12点保持不变
+        }
+
+        val timeText = "现在是：${solarDate}；星期${weekDay}；${lunarDate}；${period}${hour12}点${minute}分。"
+        return timeText
+    }
+
+    /**
+     * 获取电池信息
+     *
+     * 获取当前电量百分比和充电状态，并返回一个包含信息的字符串。
+     *
+     * @return 包含电量信息和充电状态的字符串
+     */
+    private fun getBatteryInfo(): String {
+        // ==================== 获取电量信息 ====================
+        val batteryManager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+        val batteryLevel = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)    // 电池电量百分比
+        val charging = batteryManager.isCharging    // 是否在充电
+
+        // 组装基础时间文本
+        var infoText = "电量：${batteryLevel}%"
+
+        if (charging) {
+            // 如果正在充电，添加提示
+            infoText += "，充电中"
+        } else {
+            // 如果电量低于20%，添加警告
+            if (batteryLevel < 20) {
+                infoText += "，电量较低，请注意充电"
+            }
+        }
+
+        return infoText
+    }
+
+    /**
+     * 注册亮屏广播接收器
+     * 
+     * 功能说明：
+     * 1. 监听 SCREEN_ON 事件（亮屏）
+     * 2. 亮屏时自动播报时间和电量
+     * 3. 防止重复注册，确保后台持续监听
+     */
+    private fun registerScreenOnReceiver() {
+        // 先尝试注销（防止重复注册）
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {
+            // 如果未注册过，会抛出异常，忽略即可
         }
         
-        // ==================== 组装时间文本 ====================
-        // 使用句号（。）分隔日期和时间，TTS 会在此处自然停顿
-        return "现在是${now.get(Calendar.YEAR)}年${now.get(Calendar.MONTH) + 1}月${now.get(Calendar.DAY_OF_MONTH)}日。${period}${hour12}点${now.get(Calendar.MINUTE)}分"
+        // 创建 IntentFilter，指定要监听的广播类型
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)  // 只添加亮屏事件
+        }
+        
+        // 创建广播接收器
+        screenReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_SCREEN_ON) {
+                    // 亮屏时执行播报
+                    speakCurrentTime()
+                }
+            }
+        }
+        
+        // 注册接收器
+        registerReceiver(screenReceiver, filter)
     }
 
     /**
@@ -259,8 +342,16 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      * 清理资源：
      * 1. 停止 TTS 播报
      * 2. 关闭 TTS 引擎
+     * 3. 注销广播接收器
      */
     override fun onDestroy() {
+        // 注销广播接收器
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (e: Exception) {
+            // 忽略异常
+        }
+        
         // 停止当前播报
         tts?.stop()
         // 关闭 TTS 引擎，释放资源
