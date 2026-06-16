@@ -83,6 +83,20 @@
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!--
+        RECEIVE_BOOT_COMPLETED - 接收开机完成广播权限
+
+        说明：
+        - 允许应用接收系统开机完成的广播事件
+        - 实现开机自启动功能的核心权限
+        - 普通权限，系统自动授予，无需用户手动授权
+
+        用途：
+        - 设备重启后自动启动后台服务
+        - 确保应用持续运行，无需用户手动打开
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
 
     <!--
         ========================================================================
@@ -173,6 +187,9 @@
 
             ScreenStateReceiver - 屏幕状态广播接收器
 
+            为了兼容Android 7.0之前的版本的，ACTION_SCREEN_ON 是全局系统隐式广播（无指定目标应用，所有注册 App 都会收到）的静态（xml配置）注册，Android 8.0 后台限制规则，只能用动态（代码）注册；
+            配合ScreenStateReceiver.kt类使用
+
             功能：
             - 监听系统广播（SCREEN_ON/OFF）
             - 当屏幕亮起时启动 PowerListenerService
@@ -196,11 +213,53 @@
                 作用：声明此接收器监听的广播类型
 
                 SCREEN_ON：
+                - 为了Android 7.0之前的jint
                 - 屏幕亮起时触发的系统广播
                 - 包括按电源键亮屏、充电亮屏等场景
             -->
             <intent-filter>
                 <action android:name="android.intent.action.SCREEN_ON" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            ====================================================================
+            BootReceiver - 开机自启动广播接收器
+            ====================================================================
+
+            功能：
+            - 监听系统开机完成事件（BOOT_COMPLETED）
+            - 设备重启后自动启动 PowerListenerService
+            - 确保应用无需手动打开即可持续运行
+
+            属性说明：
+            - name: 接收器类名（相对于包名）
+            - exported: true 表示可以接收系统广播（必需）
+
+            Intent Filter：
+            - 监听 BOOT_COMPLETED 事件（开机完成）
+            - 可选监听 QUICKBOOT_POWERON（快速启动）
+        -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+
+            <!--
+                Intent Filter - 意图过滤器
+
+                作用：声明此接收器监听的广播类型
+
+                BOOT_COMPLETED：
+                - 系统开机完成后触发的广播
+                - 所有应用都已加载完毕
+
+                QUICKBOOT_POWERON：
+                - 部分设备支持快速启动模式
+                - 增强兼容性
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
 

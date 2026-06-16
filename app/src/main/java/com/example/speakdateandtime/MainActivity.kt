@@ -3,8 +3,10 @@ package com.example.speakdateandtime
 
 // ==================== Android 系统相关导入 ====================
 import android.content.Intent          // Intent：用于启动服务和传递数据
+import android.content.IntentFilter
 import android.os.Build                // Build：获取设备系统版本信息
 import android.os.Bundle               // Bundle：保存 Activity 的状态数据
+import android.util.Log                // Log：日志输出
 
 // ==================== Jetpack Compose 相关导入 ====================
 import androidx.activity.ComponentActivity  // ComponentActivity：Compose 项目的基础 Activity
@@ -28,12 +30,17 @@ import com.example.speakdateandtime.ui.theme.SpeakDateAndTimeTheme
  */
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        private const val TAG = "MainActivity"  // 日志标签
+    }
+
     /**
      * Activity 创建时调用
      * @param savedInstanceState 保存的实例状态（旋转屏幕等场景使用）
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "==================== Activity 创建 ====================")
 
         // ==================== 设置 Compose UI ====================
         setContent {
@@ -56,7 +63,10 @@ class MainActivity : ComponentActivity() {
      */
     override fun onResume() {
         super.onResume()
-        // 可选：检查服务是否运行，如需要可重新启动
+        Log.d(TAG, "Activity 恢复，注册屏幕广播接受器")
+
+        // 确保服务在运行
+        startPowerListenerService()
     }
 
     /**
@@ -64,15 +74,20 @@ class MainActivity : ComponentActivity() {
      * 根据系统版本选择启动方式（Android 8.0+ 必须用前台服务）
      */
     private fun startPowerListenerService() {
+        Log.d(TAG, "用户手动启动服务")
+        
         // 创建启动 PowerListenerService 的 Intent
         val serviceIntent = Intent(this, PowerListenerService::class.java)
         
         // Android 8.0 (API 26) 及以上必须使用 startForegroundService
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Log.d(TAG, "使用 startForegroundService 启动服务")
             startForegroundService(serviceIntent)  // 启动前台服务（带通知）
         } else {
+            Log.d(TAG, "使用 startService 启动服务")
             startService(serviceIntent)              // 普通启动服务
         }
+        Log.d(TAG, "服务启动命令已发送")
     }
 }
 
