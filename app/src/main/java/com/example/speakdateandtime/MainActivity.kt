@@ -19,7 +19,9 @@ import androidx.compose.ui.unit.dp          // dp：密度无关像素单位
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import kotlinx.coroutines.delay             // 新增：协程延迟，用来同步服务状态
+import kotlinx.coroutines.delay             // 协程延迟，用来同步服务状态
+import kotlinx.coroutines.isActive          // 协程内置布尔标识：true(页面正常显示)；false(页面退出、Activity销毁)
+
 
 // ==================== 项目主题导入 ====================
 import com.example.speakdateandtime.ui.theme.SpeakDateAndTimeTheme
@@ -63,24 +65,26 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-
-        // ✅ 调用启动 WorkManager 心跳
-        startHeartbeat()
     }
 
-    // 新增：停止播报服务方法
+    // 停止播报服务方法
     private fun stopPowerListenerService() {
         Log.d(TAG, "用户触发停止服务")
         val serviceIntent = Intent(this, PowerListenerService::class.java)
         stopService(serviceIntent)
         Log.d(TAG, "停止服务指令已发送")
+
+        // 取消心跳定时任务
+        WorkManager.getInstance(this).cancelUniqueWork("Heartbeat")
+        Log.d(TAG, "已取消心跳后台定时任务")
     }
 
     // 启动WorkManager
     private fun startHeartbeat() {
         val workRequest = PeriodicWorkRequestBuilder<HeartbeatWorker>(
-            15, TimeUnit.MINUTES  // 每15分钟检查一次
-        ).build()
+            15, TimeUnit.MINUTES    // 每15分钟检查一次
+        ).setInitialDelay(15, TimeUnit.MINUTES)     // 初始延迟
+        .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "Heartbeat",
@@ -90,19 +94,6 @@ class MainActivity : ComponentActivity() {
         Log.d("MainActivity", "WorkManager 心跳已启动")
     }
 
-    /**
-     * Activity 恢复时调用
-     * 确保服务在后台运行（如果被关闭则重新启动）
-     */
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "Activity 恢复，注册屏幕广播接受器")
-
-        // 优化：仅服务未运行时才启动，避免重复发送启动指令
-        if (!PowerListenerService.isRunning) {
-            startPowerListenerService()
-        }
-    }
 
     /**
      * 启动电源键播报服务
@@ -122,6 +113,10 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "使用 startService 启动服务")
             startService(serviceIntent)              // 普通启动服务
         }
+
+        // ✅ 调用启动 WorkManager 心跳
+        startHeartbeat()
+
         Log.d(TAG, "服务启动命令已发送")
     }
 }
@@ -143,9 +138,12 @@ fun PowerKeyScreen(onStartService: () -> Unit, onStopService: () -> Unit) {
     var isServiceRunning by remember { mutableStateOf(PowerListenerService.isRunning) }
     var statusText by remember { mutableStateOf(if (isServiceRunning) "服务运行中" else "服务未启动") }
 
-    // 新增：实时同步后台服务真实状态，解决切后台、重启Worker后UI状态错乱
+    // 实时同步后台服务真实状态，解决切后台、重启Worker后UI状态错乱
+    // isActive 是协程内置布尔标识：
+    // 页面正常显示：isActive = true，循环每秒刷新状态；
+    // 页面退出、Activity 销毁：isActive = false，循环直接终止，协程释放，无后台残留。
     LaunchedEffect(Unit) {
-        while (true) {
+        while (isActive) {
             // 每秒读取一次服务全局标记，同步UI
             isServiceRunning = PowerListenerService.isRunning
             statusText = if (isServiceRunning) "服务运行中" else "服务未启动"
