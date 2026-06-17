@@ -53,35 +53,28 @@
     -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-<!-- 此APP中FOREGROUND_SERVICE、FOREGROUND_SERVICE_DATA_SYNC 这2个权限都要，否则闪退，原因待查  -->
-
     <!--
-        FOREGROUND_SERVICE - 前台服务权限
+        FOREGROUND_SERVICE - 基础前台服务权限
 
         说明：
         - 允许应用启动前台服务
         - 前台服务会显示持久性通知，优先级高
         - 不容易被系统杀死
-
-        注意：
-        - Android 9.0+ 已移除此权限的必要性
-        - 但为了兼容旧版本，建议保留
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <!--
-        FOREGROUND_SERVICE_DATA_SYNC - 前台服务数据同步权限（Android 14+ 必需）
+        FOREGROUND_SERVICE_xxx 前台服务类型
 
         说明：
         - Android 14 (API 34) 要求前台服务必须声明具体类型
-        - dataSync 表示这是一个数据同步类的前台服务
-        - 与 foregroundServiceType="dataSync" 配合使用
+        - 与 foregroundServiceType="specialUse" 配合使用
 
         重要性：
+        - Android 12 + 后台唤醒容易触发前台超时崩溃
         - Android 14+ 必须声明此权限，否则编译报错
-        - 替代了通用的 FOREGROUND_SERVICE 权限
     -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!--
         RECEIVE_BOOT_COMPLETED - 接收开机完成广播权限
@@ -114,7 +107,7 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="亮屏播报时间"
+        android:label="亮屏报时"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <!--
@@ -172,17 +165,20 @@
             - name: 服务类名（相对于包名）
             - exported: false 表示只能被本应用启动（安全性更好）
             - foregroundServiceType: 前台服务类型（Android 14+ 必需）
-              * dataSync 表示数据同步类服务
-              * 必须与 FOREGROUND_SERVICE_DATA_SYNC 权限配合使用
-             - android:permission="android.permission.BIND_FOREGROUND_SERVICE"
+            - <property>标签是前台服务类型的说明
+            - android:permission="android.permission.BIND_FOREGROUND_SERVICE"
                * 限制第三方应用随意绑定前台服务，只允许系统进程绑定，安全加固属性；
         -->
         <service
             android:name=".PowerListenerService"
             android:exported="false"
-            android:foregroundServiceType="dataSync"
-            android:permission="android.permission.BIND_FOREGROUND_SERVICE"
-            />
+            android:foregroundServiceType="specialUse"
+            android:permission="android.permission.BIND_FOREGROUND_SERVICE">
+            <property
+                android:name="android.app.PROPERTY_FOREGROUND_SERVICE_SPECIAL_USE_DESCRIPTION"
+                android:value="亮屏后语音播报时间、日期、星期、农历、电量，需要后台常驻监听电源键事件，不属于媒体播放或数据同步等标准类型"/>
+
+        </service>
 
         <!--
             ====================================================================

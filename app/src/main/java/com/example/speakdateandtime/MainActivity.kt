@@ -52,13 +52,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             // 应用 Material3 主题
             SpeakDateAndTimeTheme {
-                // 显示电源键播报控制界面
+                // 显示亮屏播报控制界面
                 PowerKeyScreen(
                     // 启动服务的回调函数
                     onStartService = {
                         startPowerListenerService()
                     },
-                    // 新增：停止服务回调
+                    // 停止服务回调
                     onStopService = {
                         stopPowerListenerService()
                     }
@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * 电源键播报控制界面（Composable 函数）
+ * 亮屏播报控制界面（Composable 函数）
  *
  * Composable 函数是 Jetpack Compose 的核心，用于声明式地构建 UI
  *

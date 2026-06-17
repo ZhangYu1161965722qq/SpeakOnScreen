@@ -56,6 +56,8 @@ dependencies {
     
     // 农历计算库（lunar的升级版tyme，离线可用）
     implementation("cn.6tail:tyme4kt:1.4.1")
+
+    implementation("androidx.media:media:1.7.0")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
