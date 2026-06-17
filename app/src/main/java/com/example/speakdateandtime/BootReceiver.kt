@@ -38,9 +38,6 @@ class BootReceiver : BroadcastReceiver() {
         // ==================== 记录接收到的广播 ====================
         Log.d(TAG, "收到广播: ${intent.action}")
 
-        // 加一个 Toast 确认收到了广播
-        Toast.makeText(context, "收到开机广播", Toast.LENGTH_SHORT).show()
-        
         // ==================== 检查是否为开机完成事件 ====================
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             Log.d(TAG, "检测到开机完成，准备启动服务")

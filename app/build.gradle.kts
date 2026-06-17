@@ -50,6 +50,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+
+    //WorkManager所在的官方工具包
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
     
     // 农历计算库（lunar的升级版tyme，离线可用）
     implementation("cn.6tail:tyme4kt:1.4.1")

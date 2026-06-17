@@ -114,7 +114,7 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="电源键播报"
+        android:label="亮屏播报时间"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <!--
@@ -174,53 +174,15 @@
             - foregroundServiceType: 前台服务类型（Android 14+ 必需）
               * dataSync 表示数据同步类服务
               * 必须与 FOREGROUND_SERVICE_DATA_SYNC 权限配合使用
+             - android:permission="android.permission.BIND_FOREGROUND_SERVICE"
+               * 限制第三方应用随意绑定前台服务，只允许系统进程绑定，安全加固属性；
         -->
         <service
             android:name=".PowerListenerService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <!--
-            ====================================================================
-            BroadcastReceiver 组件声明
-            ====================================================================
-
-            ScreenStateReceiver - 屏幕状态广播接收器
-
-            为了兼容Android 7.0之前的版本的，ACTION_SCREEN_ON 是全局系统隐式广播（无指定目标应用，所有注册 App 都会收到）的静态（xml配置）注册，Android 8.0 后台限制规则，只能用动态（代码）注册；
-            配合ScreenStateReceiver.kt类使用
-
-            功能：
-            - 监听系统广播（SCREEN_ON/OFF）
-            - 当屏幕亮起时启动 PowerListenerService
-            - 作为系统和后台服务之间的桥梁
-
-            属性说明：
-            - name: 接收器类名（相对于包名）
-            - exported: true 表示可以接收系统广播（必需）
-
-            Intent Filter：
-            - 只监听 SCREEN_ON 事件（亮屏）
-            - 不监听 SCREEN_OFF，避免屏幕超时误触发
-        -->
-        <receiver
-            android:name=".ScreenStateReceiver"
-            android:exported="true">
-
-            <!--
-                Intent Filter - 意图过滤器
-
-                作用：声明此接收器监听的广播类型
-
-                SCREEN_ON：
-                - 为了Android 7.0之前的jint
-                - 屏幕亮起时触发的系统广播
-                - 包括按电源键亮屏、充电亮屏等场景
-            -->
-            <intent-filter>
-                <action android:name="android.intent.action.SCREEN_ON" />
-            </intent-filter>
-        </receiver>
+            android:foregroundServiceType="dataSync"
+            android:permission="android.permission.BIND_FOREGROUND_SERVICE"
+            />
 
         <!--
             ====================================================================
@@ -235,6 +197,8 @@
             属性说明：
             - name: 接收器类名（相对于包名）
             - exported: true 表示可以接收系统广播（必需）
+            - android:directBootAware="true"
+              * 开机输入锁屏密码前也能收到广播，避免重启后没解锁不启动服务
 
             Intent Filter：
             - 监听 BOOT_COMPLETED 事件（开机完成）
@@ -242,7 +206,8 @@
         -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:directBootAware="true">
 
             <!--
                 Intent Filter - 意图过滤器
@@ -256,10 +221,14 @@
                 QUICKBOOT_POWERON：
                 - 部分设备支持快速启动模式
                 - 增强兼容性
+
+                category.DEFAULT
+                - 系统开机广播要求必须加，部分原生安卓、一加、谷歌设备不加会收不到广播
             -->
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
 
