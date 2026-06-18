@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.speakdateandtime"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3     // 内部版本号（升级判断用，数字，每次发版必须 +1）
+        versionName = "1.2"     // 展示给用户的版本名称（前台显示）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -38,6 +38,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true // 开启自动生成一个类 BuildConfig，是当前编译包的固定标记常量
     }
 }
 
