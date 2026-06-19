@@ -51,8 +51,6 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
 
         private const val CHANNEL_FG = "power_tts_fg"    // 前台常驻渠道：普通DEFAULT
 
-        var isRunning = false  // service是否在运行全局标记
-
         private const val SPEECH_RATE = 0.6f    // 语速 0.6 取值范围：0.1f（最慢）~ 2.0f（最快），1.0f 为正常速度
 
         private const val VOLUME_DAY = 0.7      // 白天音量
@@ -60,25 +58,17 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
 
         private var channelCreated = false // 渠道仅创建一次，避免重复调用系统渠道接口
 
-        private var lastTtsCheckTime = 0L   // （检测TTS是否真活着的）上次检测时间
-        private const val TTS_CHECK_INTERVAL = 30000L  // （检测TTS是否真活着的）检测间隔时长// 30秒
     }
 
 
 
     // ==================== 实例成员变量 ====================
     private var needSpeakTask = false   // 需要补发标记「有一条亮屏播报任务等着 TTS 初始化完成后补发」
-    private var isRecreating = false  // TTS是否正在重建的标记
-    private var isSpeaking = false // 实例播报状态标记
     private var tts: TextToSpeech? = null           // TTS 引擎实例
-    private var isTtsReady = false                  // TTS 是否初始化完成
+
 
     // 同步锁对象，synchronized(speakLock) {}，在5个地方：
-    // 1.restoreOriginVolume() 内部自带锁（兜底所有恢复音量路径，不用管调用方）
     // 2.doSpeak() 外层锁（播报、赋值音量、isSpeaking 互斥）
-    // 3.亮屏广播接收器 onReceive 外层锁（防止连续亮屏重叠播报）
-    // 4.onStartCommand 外层单一层锁（处理停止播报、注册接收器）
-    // 5.onInit 补发块加一层锁（防止补发和亮屏并发）
     private val speakLock = Any()       // 同步锁对象
     private var audioManager: AudioManager? = null  // 音频管理器
     private var batteryManager: BatteryManager? = null // 电池管理器，全局复用，无需每次播报重复获取
@@ -96,7 +86,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      */
     override fun onCreate() {
         super.onCreate()
-        isRunning = true
+
         if (BuildConfig.DEBUG) Log.d(TAG, "==================== 服务创建 ====================")
         // ==== 1. 初始化通知、音频、电池系统管理器 ====
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -124,11 +114,10 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      * @param status 初始化状态：SUCCESS 表示成功，ERROR 表示失败
      */
     override fun onInit(status: Int) {
-        // 检查初始化是否成功
-        isTtsReady = status == TextToSpeech.SUCCESS
-        if (BuildConfig.DEBUG) Log.d(TAG, "TTS 初始化状态: ${if (isTtsReady) "成功" else "失败"}")
+        // 初始化是成功时
+        if (status == TextToSpeech.SUCCESS) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "TTS 初始化成功")
 
-        if (isTtsReady) {
             // ====== 配置 TTS 参数 ======
             // 设置语言为中文
             tts?.language = Locale.CHINESE
@@ -136,27 +125,27 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
             // 设置语速
             tts?.setSpeechRate(SPEECH_RATE)
             if (BuildConfig.DEBUG) Log.d(TAG, "TTS 配置完成 - 语言: 中文, 语速: $SPEECH_RATE")
-            synchronized(speakLock) {
-                // 存在待播报任务：实时重新获取当前最新时间电量播报（时间不会过时）
-                if (needSpeakTask) {
-                    // 不是正在播报时
-                    if (!isSpeaking) {
-                        val (timeText, period) = getCurrentTimeText()
-                        val batteryText = getBatteryInfo()
-                        val speakText = timeText + "\n" + batteryText
 
-                        // 音量百分比
-                        val percent: Double = if (period == "深夜") VOLUME_NIGHT else VOLUME_DAY
+            // 存在待播报任务：实时重新获取当前最新时间电量播报（时间不会过时）
+            if (needSpeakTask) {
+                // 不是正在播报时
+                if (!isTtsSpeaking()) {
+                    val (timeText, period) = getCurrentTimeText()
+                    val batteryText = getBatteryInfo()
+                    val speakText = timeText + "\n" + batteryText
 
-                        // ====== 调方法，播报执行逻辑 ======
-                        doSpeak(speakText, percent)
-                    }
+                    // 音量百分比
+                    val percent: Double = if (period == "深夜") VOLUME_NIGHT else VOLUME_DAY
 
-                    needSpeakTask = false   // 清空有播报任务标记，防止重复播报
+                    // ====== 调方法，播报执行逻辑 ======
+                    doSpeak(speakText, percent)
                 }
+
+                needSpeakTask = false   // 清空有播报任务标记，防止重复播报
             }
         } else {
             // TTS初始化失败，清空标记
+            tts = null
             needSpeakTask = false
         }
     }
@@ -176,15 +165,11 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
 
         // 取消播报
         if (intent?.getStringExtra("action") == "CANCEL_SPEECH") {
-            // 同步锁，防并发
-            synchronized(speakLock) {
+            tts?.stop()
 
-                tts?.stop()
+            restoreOriginVolume()   // 恢复原音量
 
-                restoreOriginVolume()   // 恢复原音量
-
-                if (BuildConfig.DEBUG) Log.d(TAG, "✅ 用户取消播报")
-            }
+            if (BuildConfig.DEBUG) Log.d(TAG, "✅ 用户取消播报")
         }
 
         // START_REDELIVER_INTENT：如果服务被杀死，系统会重启服务并重新投递最后一个 Intent；START_STICKY：服务被杀后系统自动重启，不复用历史Intent
@@ -196,8 +181,6 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      * 清理资源：1.停止 TTS 播报；2.关闭 TTS 引擎；3.注销广播接收器
      */
     override fun onDestroy() {
-        isRunning = false
-
         // 还原媒体音量，防止进程异常被杀后音量卡死
         restoreOriginVolume()
 
@@ -299,10 +282,6 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
     private fun recreateTts(): Boolean {
         restoreOriginVolume() // 重建前强制恢复音量+解锁
 
-        if (isRecreating) return false  // 正在重建中，跳过
-
-        isRecreating=true
-
         try {
             // 1. 清理旧的 TTS 实例
             try {
@@ -310,9 +289,8 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
                 tts?.shutdown()
             } catch (_: Exception) {}
 
-            tts = null
-            isTtsReady = false  // 重置TTS对象初始化状态
-            lastTtsCheckTime = 0L  // 重置检测时间
+            tts = null // 重置TTS对象初始化状态
+
 
             // 2. 创建全新的 TTS 实例（异步初始化）
             tts = TextToSpeech(this, this)
@@ -339,9 +317,6 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.e(TAG, "TTS重建异常", e)
             return false
-        } finally {
-            // 无论成功失败，释放重建锁
-            isRecreating = false
         }
     }
 
@@ -352,10 +327,9 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      */
     private fun speakCurrentTime() {
         if (BuildConfig.DEBUG) Log.d(TAG, "开始播报流程")
-        synchronized(speakLock) {
-            // 保存当前音量（STREAM_MUSIC 是媒体音量通道）
-            originalVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
-        }
+        // 保存当前音量（STREAM_MUSIC 是媒体音量通道）
+        originalVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+
         // ====== 确保 TTS 可用 ======
         // 主动检测TTS是否活着，如果 TTS 可用
         if (isTtsActuallyAvailable()) {
@@ -394,7 +368,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
 
             // 根据 speak 返回值决定是否标记
             if (result == TextToSpeech.SUCCESS) {
-                isSpeaking = true   // 标记正在播报
+
 
                 if (BuildConfig.DEBUG) Log.d(TAG, "TTS 播报成功，$text")
             } else {
@@ -527,17 +501,13 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         screenReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == Intent.ACTION_SCREEN_ON) {
-                    // 同步锁，防并发，覆盖音量
-                    synchronized(speakLock) {
-                        // 播报状态不是在运行中
-                        if (!isSpeaking) {
-                            // 调用方法，亮屏时执行播报
-                            speakCurrentTime()
-                        } else {
-                            if (BuildConfig.DEBUG) Log.d(TAG, "拦截播报：语音正在播放中")
-                        }
+                    // 播报状态不是在运行中
+                    if (!isTtsSpeaking()) {
+                        // 调用方法，亮屏时执行播报
+                        speakCurrentTime()
+                    } else {
+                        if (BuildConfig.DEBUG) Log.d(TAG, "拦截播报：语音正在播放中")
                     }
-
                 }
             }
         }
@@ -553,7 +523,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
         synchronized(speakLock) {
             val currentVolume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
 
-            // ✅ 判断：当前音量是否还是播报时的目标音量？
+            // 判断：当前音量是否还是播报时的目标音量
             if (currentVolume == targetVolumeDuringSpeak) {
                 // 是 → 用户没动过，恢复原始音量
                 audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
@@ -566,7 +536,7 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
             // 重置状态
             originalVolume = 0
             targetVolumeDuringSpeak=0
-            isSpeaking = false // 同步释放播报锁
+
         }
     }
 
@@ -574,22 +544,29 @@ class PowerListenerService : Service(), TextToSpeech.OnInitListener {
      * 检查 TTS 是否真正可用（主动检测，不依赖标记）
      */
     private fun isTtsActuallyAvailable(): Boolean {
-        if (!isTtsReady || tts == null) return false
+        if (tts == null) return false
 
-        val now = System.currentTimeMillis()
-        if (now - lastTtsCheckTime < TTS_CHECK_INTERVAL) {
-            return true  // 30秒内认为 TTS 还活着
-        }
-        lastTtsCheckTime = now
-
+        // 返回值
         return try {
             val result = tts?.speak("", TextToSpeech.QUEUE_FLUSH, null, "check") == TextToSpeech.SUCCESS
             if (!result) {
-                isTtsReady = false  // 检测到失效，重置标记
+                tts = null  // 检测到失效，tts置空
             }
             result
         } catch (_: Exception) {
-            isTtsReady = false
+            tts = null  // 异常，tts置空
+            false
+        }
+    }
+
+    /**
+     * 检查 TTS 是否正在播报（直接查询 TTS 引擎）
+     */
+    private fun isTtsSpeaking(): Boolean {
+        return try {
+            tts?.isSpeaking ?: false
+        } catch (e: Exception) {
+            Log.e(TAG, "检查 TTS 状态异常: ${e.message}")
             false
         }
     }

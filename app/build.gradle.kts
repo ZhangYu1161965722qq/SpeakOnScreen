@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.speakdateandtime"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4     // 内部版本号（升级判断用，数字，每次发版必须 +1）
-        versionName = "1.3"     // 展示给用户的版本名称（前台显示）
+        versionCode = 5     // 内部版本号（升级判断用，数字，每次发版必须 +1）
+        versionName = "2.0"     // 展示给用户的版本名称（前台显示）
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,7 +56,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     
     // 农历计算库（lunar的升级版tyme，离线可用）
-    implementation("cn.6tail:tyme4kt:1.4.1")
+    implementation("cn.6tail:tyme4kt:1.4.5")
 
     implementation("androidx.media:media:1.7.0")
     

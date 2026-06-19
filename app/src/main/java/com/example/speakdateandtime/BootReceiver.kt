@@ -7,7 +7,7 @@ import android.content.Context           // Context：上下文
 import android.content.Intent           // Intent：用于启动服务
 import android.os.Build                 // Build：系统版本检测
 import android.util.Log                 // Log：日志输出
-import android.widget.Toast
+//import android.widget.Toast
 
 /**
  * 开机自启动广播接收器
